@@ -222,6 +222,7 @@ void view_pack::resize_out_of_line_storage(size_t new_dim, size_t old_dim)
 
 Int* view_pack::allocate_new_storage(size_t n)
 {
+  // We need to use malloc because we will use realloc later
   Int* result = static_cast<Int*>(std::malloc(storage_bytes(n)));
   LEGRAD_CHECK_AND_THROW(result != nullptr, std::runtime_error,
                          "Cannot allocate new storage with size: {}", n);

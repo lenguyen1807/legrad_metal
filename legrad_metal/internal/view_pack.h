@@ -109,6 +109,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <cstdint>
 #include <cstdlib>
 
+#include "internal/array_view.h"
 #include "macros/log.h"
 
 using Int = int64_t;
@@ -148,6 +149,9 @@ public:
   view_pack& operator=(const view_pack&);
   view_pack(view_pack&&) noexcept;
   view_pack& operator=(view_pack&&) noexcept;
+
+  IntArrayView shape_view() const noexcept { return {shape_data(), dim()}; }
+  IntArrayView stride_view() const noexcept { return {stride_data(), dim()}; }
 
   const Int* shape_data() const noexcept
   {
@@ -194,21 +198,20 @@ public:
     return unsafe_stride_at(idx);
   }
 
-  // void set_shape(IntArrayView shape)
-  // {
-  //   resize_storage(shape.size());
-  //   std::copy(shape.begin(), shape.end(), shape_begin());
-  // }
+  void set_shape(IntArrayView shape)
+  {
+    resize_storage(shape.size());
+    std::copy(shape.begin(), shape.end(), shape_begin());
+  }
 
-  // void set_stride(IntArrayView stride)
-  // {
-  //   if (stride.size() != dim_) {
-  //     LEGRAD_THROW_ERROR(std::invalid_argument,
-  //                        "New stride is not match with current shape size",
-  //                        0);
-  //   }
-  //   std::copy(stride.begin(), stride.end(), stride_begin());
-  // }
+  void set_stride(IntArrayView stride)
+  {
+    if (stride.size() != dim_) {
+      LEGRAD_THROW_ERROR(std::invalid_argument,
+                         "New stride is not match with current shape size", 0);
+    }
+    std::copy(stride.begin(), stride.end(), stride_begin());
+  }
 
   void resize_storage(size_t new_dim);
   bool is_inline() const { return dim_ <= LEGRAD_VIEW_PACK_MAX_DIM; }
