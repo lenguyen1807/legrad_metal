@@ -5,6 +5,8 @@ file(GLOB_RECURSE SRC_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/core/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/internal/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/metal_mgr.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/backend/metal_function.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/backend/metal_dispatcher.cpp"
 )
 
 file(GLOB_RECURSE INCLUDE_FILES
@@ -13,6 +15,8 @@ file(GLOB_RECURSE INCLUDE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/internal/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/metal_mgr.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/backend/metal_function.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/backend/metal_dispatcher.h"
 )
 
 set(INCLUDE_DIR
@@ -91,7 +95,7 @@ target_link_libraries(${SHARED_LIB_NAME} PUBLIC
                     Boost::log_setup
                     Threads::Threads
                     ${EXTRA_LIBS})
-target_compile_definitions(${SHARED_LIB_NAME} PUBLIC KERNEL_PATH="${CMAKE_CURRENT_SOURCE_DIR}/kernels/")
+target_compile_definitions(${SHARED_LIB_NAME} PUBLIC KERNEL_PATH="${CMAKE_CURRENT_SOURCE_DIR}/backend/kernels/")
 target_compile_features(${SHARED_LIB_NAME} PRIVATE cxx_std_17)
 
 if (BUILD_TESTS)
