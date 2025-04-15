@@ -1,3 +1,6 @@
 [submodule "legrad_metal/backend/metal/metal-cpp"]
 	path = legrad_metal/backend/metal/metal-cpp
 	url = https://github.com/bkaradzic/metal-cpp.git
+[submodule "python/pybind11"]
+	path = python/pybind11
+	url = https://github.com/pybind/pybind11
