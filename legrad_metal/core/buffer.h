@@ -5,40 +5,37 @@
 
 #include "Metal/MTLBuffer.hpp"
 #include "core/allocator.h"
+#include "macros/log.h"
 #include "metal_mgr.h"
 
 namespace core
 {
-class Buffer
+class MetalBuffer
 {
 public:
-  Buffer() = default;
-
   // Buffer will manage this resources
-  Buffer(MTL::Buffer* buffer, size_t nbytes)
+  MetalBuffer(MTL::Buffer* buffer, size_t nbytes)
       : ptr_(buffer)
       , size_(nbytes)
   {
+    LEGRAD_LOG_DEBUG("Create MetalBuffer with size: {} and pointer: {}", nbytes,
+                     ptr_->contents());
   }
 
-  ~Buffer()
+  ~MetalBuffer()
   {
-    // call allocator to delete this buffer
-    auto& allocator = MetalMgr::instance().allocator();
-    allocator.free(this);
-
-    // set to default value
-    ptr_ = nullptr;
-    size_ = 0;
+    LEGRAD_LOG_DEBUG("Free MetalBuffer with size: {} and pointer: {}", size_,
+                     ptr_->contents());
+    free_buffer();
   }
 
   // We want to avoid Buffer copy
   // This will create some unknown behaviours
-  Buffer(const Buffer&) = delete;
-  Buffer& operator=(const Buffer&) = delete;
+  MetalBuffer(const MetalBuffer&) = delete;
+  MetalBuffer& operator=(const MetalBuffer&) = delete;
 
   // But we can move Buffer
-  Buffer(Buffer&& buf)
+  MetalBuffer(MetalBuffer&& buf) noexcept
       : ptr_(buf.ptr_)
       , size_(buf.size_)
   {
@@ -46,13 +43,40 @@ public:
     buf.ptr_ = nullptr;
   }
 
-  void* host_ptr() { return ptr_->contents(); }
-  const void* host_ptr() const { return ptr_->contents(); }
+  MetalBuffer& operator=(MetalBuffer&& buf) noexcept
+  {
+    if (this == &buf) {
+      return *this;
+    }
+
+    // delete resource of current buffer first
+    free_buffer();
+    // move resource to current buffer
+    ptr_ = buf.ptr_;
+    size_ = buf.size_;
+    // set other to default
+    buf.ptr_ = nullptr;
+    buf.size_ = 0;
+
+    return *this;
+  }
 
   MTL::Buffer* ptr() { return ptr_; }
   const MTL::Buffer* ptr() const { return ptr_; }
 
   size_t size() const { return size_; }
+
+private:
+  void free_buffer()
+  {
+    // call allocator to delete this buffer
+    auto& allocator = MetalMgr::instance().allocator();
+    allocator.free(this);
+
+    // assign to null and zero
+    ptr_ = nullptr;
+    size_ = 0;
+  }
 
 private:
   MTL::Buffer* ptr_ = nullptr;

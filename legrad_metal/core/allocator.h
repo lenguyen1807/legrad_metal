@@ -2,22 +2,23 @@
 
 #include <cstddef>
 #include <map>
+#include <unordered_map>
 
 #include "Metal/MTLBuffer.hpp"
 
 namespace core
 {
 // forward declaration
-class Buffer;
+class MetalBuffer;
 
-class Allocator
+class MetalAllocator
 {
 public:
-  Allocator();
-  ~Allocator();
+  MetalAllocator();
+  ~MetalAllocator();
 
-  Buffer alloc(size_t nbytes);
-  void free(Buffer* buf);
+  MetalBuffer alloc(size_t nbytes);
+  void free(MetalBuffer* buf);
   size_t size() const { return allocation_map_.size(); }
   size_t nbytes() const { return total_bytes_; }
 
@@ -28,7 +29,7 @@ private:
 private:
   std::mutex mtx_;
   std::multimap<size_t, MTL::Buffer*> available_pool_;
-  std::multimap<MTL::Buffer*, size_t> allocation_map_;
+  std::unordered_map<MTL::Buffer*, size_t> allocation_map_;
 
   // for debug
   size_t total_bytes_;

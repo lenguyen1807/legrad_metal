@@ -11,31 +11,36 @@
 
 namespace core
 {
-Allocator::Allocator()
+MetalAllocator::MetalAllocator()
     : total_bytes_(0)
 {
 }
 
-Allocator::~Allocator()
+MetalAllocator::~MetalAllocator()
 {
+  LEGRAD_LOG_TRACE("Allocator destruct called", 0);
   free_cached();
 }
 
-void Allocator::free_cached()
+void MetalAllocator::free_cached()
 {
   for (const auto& [size, ptr] : available_pool_) {
+    LEGRAD_LOG_TRACE("Release buffer with pointer {} and size {}",
+                     ptr->contents(), size);
     ptr->release();
   }
   available_pool_.clear();
 }
 
-Buffer Allocator::alloc(size_t nbytes)
+MetalBuffer MetalAllocator::alloc(size_t nbytes)
 {
   std::lock_guard<std::mutex> lock(mtx_);
 
   MTL::Buffer* ptr = nullptr;
 
-  if (nbytes != 0) {
+  if (nbytes == 0) {
+    LEGRAD_LOG_WARN("Allocator create buffer with 0 size", 0);
+  } else {
     // We find if memory pool already has the memory with size we want
     auto it = available_pool_.find(nbytes);
 
@@ -55,6 +60,7 @@ Buffer Allocator::alloc(size_t nbytes)
         // But before we try to do anything else
         // There maybe an out of memory issue because of caching
         // so we need to free all cache
+        LEGRAD_LOG_WARN("Canot allocate buffer, try to delete cache first", 0);
         free_cached();
         LEGRAD_LOG_WARN("All caches from Allocator are deleted", 0);
         ptr = allocate_and_throw(nbytes);
@@ -64,12 +70,10 @@ Buffer Allocator::alloc(size_t nbytes)
     }
   }
 
-  LEGRAD_LOG_WARN("Allocator create buffer with 0 size", 0);
-
-  return Buffer(ptr, nbytes);
+  return MetalBuffer(ptr, nbytes);
 }
 
-MTL::Buffer* Allocator::allocate_and_throw(size_t nbytes)
+MTL::Buffer* MetalAllocator::allocate_and_throw(size_t nbytes)
 {
   auto device = MetalMgr::instance().device();
   MTL::Buffer* ptr = device->newBuffer(nbytes, MTL::ResourceStorageModeShared);
@@ -82,9 +86,9 @@ MTL::Buffer* Allocator::allocate_and_throw(size_t nbytes)
   return ptr;
 }
 
-void Allocator::free(Buffer* buf)
+void MetalAllocator::free(MetalBuffer* buf)
 {
-  std::lock_guard<std::mutex> loc(mtx_);
+  std::lock_guard<std::mutex> lock(mtx_);
 
   if (buf->ptr() == nullptr) {
     LEGRAD_LOG_WARN("Cannot free a buffer with null data", 0);
@@ -96,7 +100,7 @@ void Allocator::free(Buffer* buf)
   if (LEGRAD_UNLIKELY(iter == allocation_map_.end())) {
     // this case is rarely happened
     LEGRAD_LOG_WARN("This buffer ({}) is not allocated by this allocator",
-                    (void*)buf);
+                    buf->ptr()->contents());
     return;
   }
 
