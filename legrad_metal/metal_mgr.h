@@ -6,6 +6,7 @@
 #include "Metal/MTLCommandQueue.hpp"
 #include "Metal/MTLDevice.hpp"
 #include "Metal/MTLLibrary.hpp"
+#include "backend/metal_dispatcher.h"
 #include "core/allocator.h"
 #include "internal/pattern.h"
 
@@ -15,11 +16,14 @@ public:
   MetalMgr();  // can throw
   ~MetalMgr();
 
-  const core::Allocator& allocator() const { return *allocator_; }
-  core::Allocator& allocator() { return *allocator_; }
+  const core::MetalAllocator& allocator() const { return *allocator_; }
+  core::MetalAllocator& allocator() { return *allocator_; }
 
   MTL::Device* device() const { return device_; }
   MTL::Library* library() const { return library_; }
+
+  const metal::KernelDispatcher& dispatcher() const { return *dispatcher_; }
+  metal::KernelDispatcher& dispatcher() { return *dispatcher_; }
 
 private:
   MTL::Device* device_;
@@ -28,5 +32,6 @@ private:
   std::mutex mtx_;
 
   // allocator for buffer
-  std::unique_ptr<core::Allocator> allocator_;
+  std::unique_ptr<core::MetalAllocator> allocator_;
+  std::unique_ptr<metal::KernelDispatcher> dispatcher_;
 };
