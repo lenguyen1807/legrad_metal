@@ -1,0 +1,3 @@
+[submodule "legrad_metal/backend/metal/metal-cpp"]
+	path = legrad_metal/backend/metal/metal-cpp
+	url = https://github.com/bkaradzic/metal-cpp.git
