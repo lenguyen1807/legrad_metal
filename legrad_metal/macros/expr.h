@@ -59,13 +59,14 @@
  * https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
  */
 #define LEGRAD_STRINGIZE_IMPL(str) #str
-#define LEGRAD_STRINGIZE(str) LNLD_STRINGIZE_IMPLE(str)
+#define LEGRAD_STRINGIZE(str) LEGRAD_STRINGIZE_IMPL(str)
 
 /*
  * https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
  */
 #define LEGRAD_CONCAT_IMPL(s1, s2) s1##s2
 #define LEGRAD_CONCAT(s1, s2) LEGRAD_CONCAT_IMPL(s1, s2)
+#define LEGRAD_CONCAT_SNAKE(s1, s2) LEGRAD_CONCAT(s1, LEGRAD_CONCAT(_, s2))
 
 /*
  * https://stackoverflow.com/questions/66593868/understanding-the-behavior-of-cs-preprocessor-when-a-macro-indirectly-expands-i
