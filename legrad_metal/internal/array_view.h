@@ -90,7 +90,10 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
+#pragma once
+
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -98,97 +101,152 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <ostream>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 #include "macros/log.h"
 
 namespace internal
 {
+// this is a tag to indicate slice count (from elem i and to i + n for count =
+// n)
+struct SliceRange
+{
+};
+
 template <typename T>
 class array_view
 {
+  // --- Member Types ---
+  using value_type = T;
+  using pointer = const T*;
+  using const_pointer = const T*;
+  using reference = const T&;
+  using const_reference = const T&;
+  using size_type = std::size_t;
+  using difference_type = std::ptrdiff_t;
   using iterator = const T*;
   using reverse_iterator = std::reverse_iterator<iterator>;
+  using const_iterator = const T*;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
 public:
-  array_view()
+  // --- Constructors ---
+  /// Construct an empty array_view.
+  constexpr array_view() noexcept
       : ptr_(nullptr)
       , len_(0)
   {
   }
 
-  array_view(const T& elem)
+  /// Construct an array_view from a single element.
+  /* implicit */ constexpr array_view(
+      const T& elem) noexcept  // Assuming taking address is noexcept
       : ptr_(&elem)
       , len_(1)
   {
   }
 
-  array_view(const T* ptr, std::size_t len) noexcept
+  /// Construct an array_view from a pointer and length.
+  constexpr array_view(const T* ptr, std::size_t len) noexcept
       : ptr_(ptr)
       , len_(len)
   {
+    debug_check_nullptr();
   }
 
-  array_view(const T* start, const T* end)
+  /// Construct an array_view from a range (start and end pointers).
+  constexpr array_view(const T* start, const T* end) noexcept
       : ptr_(start)
-      , len_(end - start)
+      , len_(static_cast<size_type>(end - start))  // Calculate length safely
   {
+    LEGRAD_ASSERT(start <= end, "Start pointer cannot be after end pointer", 0);
+    debug_check_nullptr();
   }
 
-  template <typename Container,
-            typename = std::enable_if_t<std::is_same<
-                std::remove_const_t<decltype(std::declval<Container>().data())>,
-                T*>::value>>
-  array_view(const Container& container)
+  /// Construct an array_view from a C-style array.
+  template <size_t N>
+  // NOLINTNEXTLINE(*c-arrays*) - Necessary for this constructor
+  /* implicit */ constexpr array_view(const T (&Arr)[N]) noexcept
+      : ptr_(Arr)
+      , len_(N)
+  {
+    // No debugCheck needed if N > 0, C-arrays can't be null.
+    // If N == 0, ptr_ might be anything but len_ is 0, so invariant holds.
+  }
+
+  /// Construct an array_view from any contiguous container defining data() and
+  /// size() (e.g., std::vector, std::array, std::string).
+  template <
+      typename Container,
+      typename = std::enable_if_t<
+          std::is_same_v<
+              std::remove_const_t<decltype(std::declval<Container>().data())>,
+              T*>
+          && std::is_convertible_v<decltype(std::declval<Container>().size()),
+                                   std::size_t>
+          // Add more checks if needed (e.g., contiguity tags in C++20)
+          >>
+  /* implicit */ constexpr array_view(const Container& container) noexcept
       : ptr_(container.data())
-      , len_(container.size())
+      , len_(static_cast<size_type>(container.size()))  // Cast size() result
   {
+    // Implicitly handles std::vector, std::array, etc.
+    static_assert(
+        !std::is_same_v<Container,
+                        std::vector<bool>>,  // Disallow vector<bool> proxy
+        "Cannot construct array_view from std::vector<bool>");
+    debug_check_nullptr();
   }
 
-  array_view(const std::initializer_list<T>& list)
-      : ptr_(std::begin(list) == std::end(list) ? static_cast<T*>(nullptr)
-                                                : std::begin(list))
+  /// Construct an array_view from a std::initializer_list.
+  /* implicit */ constexpr array_view(
+      const std::initializer_list<T>& list) noexcept
+      : ptr_(std::begin(list) == std::end(list) ? nullptr : std::begin(list))
       , len_(list.size())
   {
+    // Invariant holds: if list is empty, ptr is nullptr, len is 0.
+    // If list non-empty, ptr is valid, len > 0.
   }
 
-  template <typename A>
-  array_view(const std::vector<T, A>& vec)
-      : ptr_(vec.data())
-      , len_(vec.size())
+  // --- Deleted Assignment ---
+  // Prevent accidental rebinding of the view via assignment,
+  // allowing only construction and copy/move construction/assignment.
+  // "view = {}" or "view = other_view" remain valid.
+  template <typename U>
+  std::enable_if_t<std::is_same_v<U, T>, array_view<T>&> operator=(
+      // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+      U&& Temporary) = delete;
+  template <typename U>
+  std::enable_if_t<std::is_same_v<U, T>, array_view<T>&> operator=(
+      std::initializer_list<U>) = delete;
+
+  // --- Observers ---
+
+  constexpr const T& operator[](size_t idx) const noexcept
   {
-    static_assert(!std::is_same_v<T, bool>,
-                  "Cannot initialize array_view with std::vector<bool>");
-  }
-
-  /*
-   * What is the point of these two template ?
-   * We need to delete the assignment of array_view
-   * so array_view = ... (will be error).
-   * But why we don't just use array_view<T>& operator(V&&) = delete ?
-   * Because we want array_view = {} valid.
-   */
-  template <typename U, typename = std::enable_if_t<std::is_same_v<U, T>>>
-  array_view<T>& operator=(U&&) = delete;
-  template <typename U, typename = std::enable_if_t<std::is_same_v<U, T>>>
-  array_view<T>& operator=(std::initializer_list<U>) = delete;
-
-  constexpr const T& operator[](size_t idx) const { return ptr_[idx]; }
-
-  const T& at(size_t idx) const
-  {
-    LEGRAD_ASSERT(idx < len_ && idx >= 0,
-                  "Index {} is out of bounds with range [0, {})", idx, len_);
+    // Standard practice for operator[] is no bounds check for performance.
+    // Use .at() for checked access.
     return ptr_[idx];
   }
 
-  const T* data() const noexcept { return ptr_; }
-  size_t size() const noexcept { return len_; }
-  bool empty() const noexcept { return len_ == 0; }
+  const T& at(size_t idx) const
+  {
+    LEGRAD_ASSERT(idx < len_,
+                  "Index {} is out of bounds for array_view of size {}", idx,
+                  len_);
+    return ptr_[idx];
+  }
 
+  constexpr const T* data() const noexcept { return ptr_; }
+  constexpr size_t size() const noexcept { return len_; }
+  constexpr bool empty() const noexcept { return len_ == 0; }
+
+  // --- Iterators ---
   constexpr iterator begin() const noexcept { return ptr_; }
   constexpr iterator end() const noexcept { return ptr_ + len_; }
-  constexpr const iterator cbegin() const noexcept { return ptr_; }
-  constexpr const iterator cend() const noexcept { return ptr_ + len_; }
+  constexpr const_iterator cbegin() const noexcept { return ptr_; }
+  constexpr const_iterator cend() const noexcept { return ptr_ + len_; }
+
   constexpr reverse_iterator rbegin() const noexcept
   {
     return std::make_reverse_iterator(end());
@@ -198,102 +256,162 @@ public:
     return std::make_reverse_iterator(begin());
   }
 
-  const T& front() const
+  // --- Element Access ---
+  constexpr const T& front() const noexcept
   {
-    LEGRAD_ASSERT(!empty(), "Attempt to access empty array view", 0);
-    return at(0);
+    LEGRAD_ASSERT(!empty(), "Attempt to access front() of empty array_view", 0);
+    return ptr_[0];
   }
 
-  const T& back() const
+  constexpr const T& back() const noexcept
   {
-    LEGRAD_ASSERT(!empty(), "Attempt to access empty array view", 0);
-    return at(size() - 1);
+    LEGRAD_ASSERT(!empty(), "Attempt to access back() of empty array_view", 0);
+    return ptr_[len_ - 1];
   }
 
-  array_view<T> slice(size_t start, size_t end)
+  // Returns a view of the subarray [start, end).
+  constexpr array_view<T> slice(size_t start, size_t end_pos) const noexcept
   {
-    LEGRAD_ASSERT(end - start <= size(),
-                  "Invalid slice with start {} and end {}", start, end);
-    return {data() + start, end - start};
+    LEGRAD_ASSERT(start <= end_pos,
+                  "Slice start index {} cannot be greater than end index {}",
+                  start, end_pos);
+    LEGRAD_ASSERT(end_pos <= size(),
+                  "Slice end index {} cannot be greater than view size {}",
+                  end_pos, size());
+    return array_view<T>(data() + start, end_pos - start);
   }
 
-  std::vector<T> to_vec() const
+  /// Returns a view of the subarray starting at `start_index` with `count`
+  /// elements.
+  constexpr array_view<T> slice(size_t start_index,
+                                size_t count,
+                                SliceRange) const noexcept
   {
-    // Note that this is really expensive
-    // Because vector will copy the data (to make its ownership)
-    return std::vector<T>(ptr_, ptr_ + len_);
+    LEGRAD_ASSERT(start_index + count <= size(),
+                  "Slice start index {} + count {} exceeds view size {}",
+                  start_index, count, size());
+    return array_view<T>(data() + start_index, count);
   }
 
-  friend std::ostream& operator<<(std::ostream& os, array_view view)
+  /// Returns a view of the subarray starting at `start_index` until the end.
+  constexpr array_view<T> slice(size_t start_index) const noexcept
   {
-    os << array_view::view_to_str(view);
-    return os;
+    LEGRAD_ASSERT(start_index <= size(),
+                  "Slice start index {} cannot be greater than view size {}",
+                  start_index, size());
+    return array_view<T>(data() + start_index, size() - start_index);
   }
 
-  static std::string view_to_str(internal::array_view<T> view)
-  {
-    LEGRAD_DEFAULT_ASSERT(std::is_arithmetic_v<T>);
+  // Converts the view to a std::vector (expensive - copies data).
+  std::vector<T> to_vec() const { return std::vector<T>(ptr_, ptr_ + len_); }
 
-    if (view.size() == 0) {
-      return "()";
+  // --- Comparison ---
+  bool equals(array_view other) const noexcept
+  {
+    if (len_ != other.len_) {
+      return false;
     }
-
-    std::string result = "(";
-    for (size_t i = 0; i < view.size() - 1; ++i) {
-      result += std::to_string(view[i]) + ",";
-    }
-    result += std::to_string(view[view.size() - 1]) + ")";
-
-    return result;
+    return std::equal(begin(), end(), other.begin());
   }
 
-  bool equals(array_view other)
-  {
-    return other.len_ == len_ && std::equal(begin(), end(), other.begin());
-  }
-
-  bool equals(const std::initializer_list<T>& other)
+  bool equals(const std::initializer_list<T>& other) const noexcept
   {
     return equals(array_view<T>(other));
   }
 
-  friend bool operator==(internal::array_view<T> lhs,
-                         internal::array_view<T> rhs)
+  // --- Output ---
+  friend std::ostream& operator<<(std::ostream& os, array_view view)
   {
-    return lhs.equals(rhs);
+    os << numerical_view_2str(view);
+    return os;
   }
 
-  friend bool operator!=(internal::array_view<T> lhs,
-                         internal::array_view<T> rhs)
+  // --- Static Helpers ---
+  static std::string numerical_view_2str(internal::array_view<T> view)
   {
-    return !(lhs == rhs);
-  }
+    LEGRAD_DEFAULT_ASSERT(std::is_arithmetic_v<T>);  // Keep if intended
 
-  friend bool operator==(const std::vector<T>& lhs, internal::array_view<T> rhs)
-  {
-    return internal::array_view<T>(lhs).equals(rhs);
-  }
+    if (view.empty()) {
+      return "[]";  // More conventional output for empty
+    }
 
-  friend bool operator==(internal::array_view<T> lhs, const std::vector<T>& rhs)
-  {
-    return rhs == lhs;
-  }
+    std::string result = "[";
 
-  friend bool operator!=(const std::vector<T>& lhs, internal::array_view<T> rhs)
-  {
-    return !(lhs == rhs);
-  }
+    bool first = true;
+    for (const auto& item : view) {
+      if (!first) {
+        result += ", ";
+      }
+      result += std::to_string(item);
+      first = false;
+    }
+    result += "]";
 
-  friend bool operator!=(internal::array_view<T> lhs, const std::vector<T>& rhs)
-  {
-    return rhs != lhs;
+    return result;
   }
 
 private:
   const T* ptr_;
   size_t len_;
+
+  // Helper to check the invariant: ptr_ should not be null if len_ > 0.
+  constexpr void debug_check_nullptr() const noexcept
+  {
+    LEGRAD_ASSERT(
+        ptr_ != nullptr || len_ == 0,
+        "Invariant violation: array_view has nullptr data but non-zero length",
+        0);
+  }
 };
+
+template <typename T>
+bool operator==(
+    internal::array_view<T> lhs,
+    internal::array_view<T> rhs) noexcept  // Assuming T::operator== is noexcept
+{
+  return lhs.equals(rhs);
+}
+
+template <typename T>
+bool operator!=(
+    internal::array_view<T> lhs,
+    internal::array_view<T> rhs) noexcept  // Assuming T::operator!= is noexcept
+{
+  return !(lhs == rhs);
+}
+
+// Comparisons with std::vector (optional, but convenient)
+template <typename T>
+bool operator==(const std::vector<T>& lhs, internal::array_view<T> rhs) noexcept
+{
+  return internal::array_view<T>(lhs).equals(rhs);
+}
+
+template <typename T>
+bool operator==(internal::array_view<T> lhs, const std::vector<T>& rhs) noexcept
+{
+  return lhs.equals(internal::array_view<T>(rhs));
+}
+
+template <typename T>
+bool operator!=(const std::vector<T>& lhs, internal::array_view<T> rhs) noexcept
+{
+  return !(lhs == rhs);
+}
+
+template <typename T>
+bool operator!=(internal::array_view<T> lhs, const std::vector<T>& rhs) noexcept
+{
+  return !(lhs == rhs);
+}
+
+// --- Type Aliases ---
+// Keep these outside the internal namespace if they are meant for public use
 }  // namespace internal
 
-using IntArrayView = internal::array_view<int64_t>;
-using Int2DArrayView = internal::array_view<internal::array_view<int64_t>>;
+// Public aliases
+template <typename T>
+using ArrayView = internal::array_view<T>;
+
+using IntArrayView = ArrayView<int64_t>;
+using Int2DArrayView = ArrayView<IntArrayView>;
