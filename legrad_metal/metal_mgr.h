@@ -21,6 +21,7 @@ public:
 
   MTL::Device* device() const { return device_; }
   MTL::Library* library() const { return library_; }
+  MTL::CommandQueue* queue() const { return cmd_queue_; }
 
   const metal::KernelDispatcher& dispatcher() const { return *dispatcher_; }
   metal::KernelDispatcher& dispatcher() { return *dispatcher_; }
