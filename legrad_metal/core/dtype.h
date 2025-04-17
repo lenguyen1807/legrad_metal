@@ -1,6 +1,10 @@
 #pragma once
 
+#include "internal/array_view.h"
 #include "internal/enum_impl.h"
+
+// forward declaration
+class Tensor;
 
 namespace core
 {
@@ -155,4 +159,5 @@ struct DataType
   }
 };
 
+TypeInfo get_common_types(ArrayView<Tensor*> inputs);
 }  // namespace core

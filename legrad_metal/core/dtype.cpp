@@ -1,5 +1,8 @@
+#include <numeric>
+
 #include "dtype.h"
 #include "internal/enum_impl.h"
+#include "tensor.h"
 
 namespace core
 {
@@ -80,4 +83,16 @@ size_t get_type_size(TypeInfo type)
   }
 }
 
+TypeInfo get_common_types(ArrayView<Tensor*> inputs)
+{
+  if (inputs.empty()) {
+    // return default type
+    return core::TypeInfo::Float32;
+  }
+
+  return std::reduce(
+      inputs.begin() + 1, inputs.end(), inputs[0]->dtype(),
+      [](core::TypeInfo current_promoted_type, const Tensor& tensor)
+      { return promote_types(current_promoted_type, tensor.dtype()); });
+}
 }  // namespace core
